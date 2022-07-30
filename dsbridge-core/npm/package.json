@@ -3,11 +3,7 @@
   "version": "3.1.4",
   "main": "index.js",
   "typings": "./index.d.ts",
-  "author": {
-    "name": "wendux",
-    "email": "824783146@qq.com",
-    "url": "https://github.com/wendux/"
-  },
+  "author": "wendux <824783146@qq.com> (https://github.com/wendux/)",
   "license": "MIT",
   "description": "Javascript Initialization code of DSBridge ",
   "keywords": [
@@ -20,11 +16,13 @@
   },
   "homepage": "https://github.com/wendux",
   "bugs": {
-    "url": "https://github.com/wendux/DSBridge-Android/issues",
-    "url2": "https://github.com/wendux/DSBridge-IOS/issues"
+    "url": "https://github.com/wendux/DSBridge-Android/issues"
+  },
+  "scripts": {
+    "build": "rollup -c rollup.config.js"
   },
   "devDependencies": {
-  },
-  "dependencies": {
+    "rollup": "^2.77.2",
+    "rollup-plugin-terser": "^7.0.2"
   }
 }

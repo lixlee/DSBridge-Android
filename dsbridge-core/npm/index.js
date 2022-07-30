@@ -1,12 +1,12 @@
 var bridge = {
-    default:this,// for typescript
+    default: this,// for typescript
     call: function (method, args, cb) {
         var ret = '';
         if (typeof args == 'function') {
             cb = args;
             args = {};
         }
-        var arg={data:args===undefined?null:args}
+        var arg = { data: args === undefined ? null : args }
         if (typeof cb == 'function') {
             var cbName = 'dscb' + window.dscb++;
             window[cbName] = cb;
@@ -15,13 +15,13 @@ var bridge = {
         arg = JSON.stringify(arg)
 
         //if in webview that dsBridge provided, call!
-        if(window._dsbridge){
-           ret=  _dsbridge.call(method, arg)
-        }else if(window._dswk||navigator.userAgent.indexOf("_dsbridge")!=-1){
-           ret = prompt("_dsbridge=" + method, arg);
+        if (window._dsbridge) {
+            ret = _dsbridge.call(method, arg)
+        } else if (window._dswk || navigator.userAgent.indexOf("_dsbridge") != -1) {
+            ret = prompt("_dsbridge=" + method, arg);
         }
 
-       return  JSON.parse(ret||'{}').data
+        return JSON.parse(ret || '{}').data
     },
     register: function (name, fun, asyn) {
         var q = asyn ? window._dsaf : window._dsf
@@ -42,7 +42,7 @@ var bridge = {
         this.register(name, fun, true);
     },
     hasNativeMethod: function (name, type) {
-        return this.call("_dsb.hasNativeMethod", {name: name, type:type||"all"});
+        return this.call("_dsb.hasNativeMethod", { name: name, type: type || "all" });
     },
     disableJavascriptDialogBlock: function (disable) {
         this.call("_dsb.disableJavascriptDialogBlock", {
@@ -80,7 +80,7 @@ var bridge = {
             var callAsyn = function (f, ob) {
                 arg.push(function (data, complete) {
                     ret.data = data;
-                    ret.complete = complete!==false;
+                    ret.complete = complete !== false;
                     bridge.call("_dsb.returnValue", ret)
                 })
                 f.apply(ob, arg)
@@ -92,9 +92,9 @@ var bridge = {
             } else {
                 //with namespace
                 var name = info.method.split('.');
-                if (name.length<2) return;
-                var method=name.pop();
-                var namespace=name.join('.')
+                if (name.length < 2) return;
+                var method = name.pop();
+                var namespace = name.join('.')
                 var obs = this._dsf._obs;
                 var ob = obs[namespace] || {};
                 var m = ob[method];
@@ -116,17 +116,17 @@ var bridge = {
         window[attr] = ob[attr]
     }
     bridge.register("_hasJavascriptMethod", function (method, tag) {
-         var name = method.split('.')
-         if(name.length<2) {
-           return !!(_dsf[name]||_dsaf[name])
-         }else{
-           // with namespace
-           var method=name.pop()
-           var namespace=name.join('.')
-           var ob=_dsf._obs[namespace]||_dsaf._obs[namespace]
-           return ob&&!!ob[method]
-         }
+        var name = method.split('.')
+        if (name.length < 2) {
+            return !!(_dsf[name] || _dsaf[name])
+        } else {
+            // with namespace
+            var method = name.pop()
+            var namespace = name.join('.')
+            var ob = _dsf._obs[namespace] || _dsaf._obs[namespace]
+            return ob && !!ob[method]
+        }
     })
 }();
 
-module.exports = bridge;
+export default bridge;
