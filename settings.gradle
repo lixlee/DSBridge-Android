@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 rootProject.name = "DSBridge-Android"
 include ':app'
 include ':dsbridge-core'
+include ':dsbridge-cocos2dx'
+include ':dsbridge-dwebview'

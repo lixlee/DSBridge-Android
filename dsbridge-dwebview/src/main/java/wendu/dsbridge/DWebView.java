@@ -3,7 +3,6 @@ package wendu.dsbridge;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
-//import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -35,15 +34,13 @@ import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 
-import org.json.JSONArray;
+import com.github.lixlee.dsbridge.DSBridge;
+import com.github.lixlee.dsbridge.DSBridgeFacade;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 
 
@@ -51,159 +48,15 @@ import java.util.Map;
  * Created by du on 16/12/29.
  */
 
-public class DWebView extends WebView {
-    private static final String BRIDGE_NAME = "_dsbridge";
-    private static final String LOG_TAG = "dsBridge";
-    private static boolean isDebug = false;
-    private Map<String, Object> javaScriptNamespaceInterfaces = new HashMap<String, Object>();
+public class DWebView extends WebView implements DSBridgeFacade {
+    private final DSBridge mDSBridge = new DSBridge(this);
     private String APP_CACHE_DIRNAME;
-    private int callID = 0;
     private WebChromeClient webChromeClient;
 
     private volatile boolean alertBoxBlock = true;
     private JavascriptCloseWindowListener javascriptCloseWindowListener = null;
-    private ArrayList<CallInfo> callInfoList;
-    private InnerJavascriptInterface innerJavascriptInterface = new InnerJavascriptInterface();
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    private class InnerJavascriptInterface {
-
-        private void PrintDebugInfo(String error) {
-            Log.d(LOG_TAG, error);
-            if (isDebug) {
-                evaluateJavascript(String.format("alert('%s')", "DEBUG ERR MSG:\\n" + error.replaceAll("\\'", "\\\\'")));
-            }
-        }
-
-        @Keep
-        @JavascriptInterface
-        public String call(String methodName, String argStr) {
-            String error = "Js bridge  called, but can't find a corresponded " +
-                    "JavascriptInterface object , please check your code!";
-            String[] nameStr = parseNamespace(methodName.trim());
-            methodName = nameStr[1];
-            Object jsb = javaScriptNamespaceInterfaces.get(nameStr[0]);
-            JSONObject ret = new JSONObject();
-            try {
-                ret.put("code", -1);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            if (jsb == null) {
-                PrintDebugInfo(error);
-                return ret.toString();
-            }
-            Object arg=null;
-            Method method = null;
-            String callback = null;
-
-            try {
-                JSONObject args = new JSONObject(argStr);
-                if (args.has("_dscbstub")) {
-                    callback = args.getString("_dscbstub");
-                }
-                if(args.has("data")) {
-                    arg = args.get("data");
-                }
-            } catch (JSONException e) {
-                error = String.format("The argument of \"%s\" must be a JSON object string!", methodName);
-                PrintDebugInfo(error);
-                e.printStackTrace();
-                return ret.toString();
-            }
-
-
-            Class<?> cls = jsb.getClass();
-            boolean asyn = false;
-            try {
-                method = cls.getMethod(methodName,
-                        new Class[]{Object.class, CompletionHandler.class});
-                asyn = true;
-            } catch (Exception e) {
-                try {
-                    method = cls.getMethod(methodName, new Class[]{Object.class});
-                } catch (Exception ex) {
-
-                }
-            }
-
-            if (method == null) {
-                error = "Not find method \"" + methodName + "\" implementation! please check if the  signature or namespace of the method is right ";
-                PrintDebugInfo(error);
-                return ret.toString();
-            }
-
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                JavascriptInterface annotation = method.getAnnotation(JavascriptInterface.class);
-                if (annotation == null) {
-                    error = "Method " + methodName + " is not invoked, since  " +
-                            "it is not declared with JavascriptInterface annotation! ";
-                    PrintDebugInfo(error);
-                    return ret.toString();
-                }
-            }
-
-            Object retData;
-            method.setAccessible(true);
-            try {
-                if (asyn) {
-                    final String cb = callback;
-                    method.invoke(jsb, arg, new CompletionHandler() {
-
-                        @Override
-                        public void complete(Object retValue) {
-                            complete(retValue, true);
-                        }
-
-                        @Override
-                        public void complete() {
-                            complete(null, true);
-                        }
-
-                        @Override
-                        public void setProgressData(Object value) {
-                            complete(value, false);
-                        }
-
-                        private void complete(Object retValue, boolean complete) {
-                            try {
-                                JSONObject ret = new JSONObject();
-                                ret.put("code", 0);
-                                ret.put("data", retValue);
-                                //retValue = URLEncoder.encode(ret.toString(), "UTF-8").replaceAll("\\+", "%20");
-                                if (cb != null) {
-                                    //String script = String.format("%s(JSON.parse(decodeURIComponent(\"%s\")).data);", cb, retValue);
-                                    String script = String.format("%s(%s.data);", cb, ret.toString());
-                                    if (complete) {
-                                        script += "delete window." + cb;
-                                    }
-                                    //Log.d(LOG_TAG, "complete " + script);
-                                    evaluateJavascript(script);
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    });
-                } else {
-                    retData = method.invoke(jsb, arg);
-                    ret.put("code", 0);
-                    ret.put("data", retData);
-                    return ret.toString();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                error = String.format("Call failed：The parameter of \"%s\" in Java is invalid.", methodName);
-                PrintDebugInfo(error);
-                return ret.toString();
-            }
-            return ret.toString();
-        }
-
-    }
-
-    Map<Integer, OnReturnValue> handlerMap = new HashMap<>();
 
     public interface JavascriptCloseWindowListener {
         /**
@@ -243,7 +96,7 @@ public class DWebView extends WebView {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             WebView.setWebContentsDebuggingEnabled(enabled);
         }
-        isDebug = enabled;
+        DSBridge.setDebug(enabled);
     }
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -265,66 +118,16 @@ public class DWebView extends WebView {
         super.setWebChromeClient(mWebChromeClient);
         addInternalJavascriptObject();
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN) {
-            super.addJavascriptInterface(innerJavascriptInterface, BRIDGE_NAME);
+            super.addJavascriptInterface(mDSBridge.getJavascriptInterfaceObject(), DSBridge.BRIDGE_NAME);
         } else {
             // add dsbridge tag in lower android version
             settings.setUserAgentString(settings.getUserAgentString() + " _dsbridge");
         }
     }
 
-
-    private String[] parseNamespace(String method) {
-        int pos = method.lastIndexOf('.');
-        String namespace = "";
-        if (pos != -1) {
-            namespace = method.substring(0, pos);
-            method = method.substring(pos + 1);
-        }
-        return new String[]{namespace, method};
-    }
-
     @Keep
     private void addInternalJavascriptObject() {
-        addJavascriptObject(new Object() {
-
-            @Keep
-            @JavascriptInterface
-            public boolean hasNativeMethod(Object args) throws JSONException {
-                JSONObject jsonObject = (JSONObject) args;
-                String methodName = jsonObject.getString("name").trim();
-                String type = jsonObject.getString("type").trim();
-                String[] nameStr = parseNamespace(methodName);
-                Object jsb = javaScriptNamespaceInterfaces.get(nameStr[0]);
-                if (jsb != null) {
-                    Class<?> cls = jsb.getClass();
-                    boolean asyn = false;
-                    Method method = null;
-                    try {
-                        method = cls.getMethod(nameStr[1],
-                                new Class[]{Object.class, CompletionHandler.class});
-                        asyn = true;
-                    } catch (Exception e) {
-                        try {
-                            method = cls.getMethod(nameStr[1], new Class[]{Object.class});
-                        } catch (Exception ex) {
-
-                        }
-                    }
-                    if (method != null) {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                            JavascriptInterface annotation = method.getAnnotation(JavascriptInterface.class);
-                            if (annotation == null) {
-                                return false;
-                            }
-                        }
-                        if ("all".equals(type) || (asyn && "asyn".equals(type) || (!asyn && "syn".equals(type)))) {
-                            return true;
-                        }
-
-                    }
-                }
-                return false;
-            }
+        mDSBridge.addJavascriptObject(new DSBridge.InternalJavascriptObject(mDSBridge) {
 
             @Keep
             @JavascriptInterface
@@ -353,39 +156,11 @@ public class DWebView extends WebView {
 
             @Keep
             @JavascriptInterface
-            public void dsinit(Object jsonObject) {
-                DWebView.this.dispatchStartupQueue();
+            public void dsinit(Object args) {
+                super.dsinit(args);
             }
 
-            @Keep
-            @JavascriptInterface
-            public void returnValue(final Object obj){
-                runOnMainThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        JSONObject jsonObject = (JSONObject) obj;
-                        Object data = null;
-                        try {
-                            int id = jsonObject.getInt("id");
-                            boolean isCompleted = jsonObject.getBoolean("complete");
-                            OnReturnValue handler = handlerMap.get(id);
-                            if (jsonObject.has("data")) {
-                                data = jsonObject.get("data");
-                            }
-                            if (handler != null) {
-                                handler.onValue(data);
-                                if (isCompleted) {
-                                    handlerMap.remove(id);
-                                }
-                            }
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            }
-
-        }, "_dsb");
+        }, DSBridge.InternalJavascriptObject.NAMESPACE_DSB);
     }
 
     private void _evaluateJavascript(String script) {
@@ -402,6 +177,7 @@ public class DWebView extends WebView {
      *
      * @param script
      */
+    @Override
     public void evaluateJavascript(final String script) {
         runOnMainThread(new Runnable() {
             @Override
@@ -425,7 +201,7 @@ public class DWebView extends WebView {
                 if (url != null && url.startsWith("javascript:")){
                     DWebView.super.loadUrl(url);
                 }else{
-                    callInfoList = new ArrayList<>();
+                    mDSBridge.getInternals().onBeforeLoadUrl();
                     DWebView.super.loadUrl(url);
                 }
             }
@@ -447,7 +223,7 @@ public class DWebView extends WebView {
                 if (url != null && url.startsWith("javascript:")){
                     DWebView.super.loadUrl(url, additionalHttpHeaders);
                 }else{
-                    callInfoList = new ArrayList<>();
+                    mDSBridge.getInternals().onBeforeLoadUrl();
                     DWebView.super.loadUrl(url, additionalHttpHeaders);
                 }
             }
@@ -459,7 +235,7 @@ public class DWebView extends WebView {
         runOnMainThread(new Runnable() {
             @Override
             public void run() {
-                callInfoList = new ArrayList<>();
+                mDSBridge.getInternals().onBeforeLoadUrl();
                 DWebView.super.reload();
             }
         });
@@ -472,67 +248,19 @@ public class DWebView extends WebView {
         javascriptCloseWindowListener = listener;
     }
 
-
-    private static class CallInfo {
-        private String data;
-        private int callbackId;
-        private String method;
-
-        CallInfo(String handlerName, int id, Object[] args) {
-            if (args == null) args = new Object[0];
-            data = new JSONArray(Arrays.asList(args)).toString();
-            callbackId = id;
-            method = handlerName;
-        }
-
-        @Override
-        public String toString() {
-            JSONObject jo = new JSONObject();
-            try {
-                jo.put("method", method);
-                jo.put("callbackId", callbackId);
-                jo.put("data", data);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-            return jo.toString();
-        }
-    }
-
-    private synchronized void dispatchStartupQueue() {
-        if (callInfoList != null) {
-            for (CallInfo info : callInfoList) {
-                dispatchJavascriptCall(info);
-            }
-            callInfoList = null;
-        }
-    }
-
-    private void dispatchJavascriptCall(CallInfo info) {
-        evaluateJavascript(String.format("window._handleMessageFromNative(%s)", info.toString()));
-    }
-
+    @Override
     public synchronized <T> void callHandler(String method, Object[] args, final OnReturnValue<T> handler) {
-
-        CallInfo callInfo = new CallInfo(method, ++callID, args);
-        if (handler != null) {
-            handlerMap.put(callInfo.callbackId, handler);
-        }
-
-        if (callInfoList != null) {
-            callInfoList.add(callInfo);
-        } else {
-            dispatchJavascriptCall(callInfo);
-        }
-
+        mDSBridge.callHandler(method, args, handler);
     }
 
+    @Override
     public void callHandler(String method, Object[] args) {
-        callHandler(method, args, null);
+        mDSBridge.callHandler(method, args);
     }
 
+    @Override
     public <T> void callHandler(String method, OnReturnValue<T> handler) {
-        callHandler(method, null, handler);
+        mDSBridge.callHandler(method, handler);
     }
 
 
@@ -542,8 +270,9 @@ public class DWebView extends WebView {
      * @param handlerName
      * @param existCallback
      */
+    @Override
     public void hasJavascriptMethod(String handlerName, OnReturnValue<Boolean> existCallback) {
-        callHandler("_hasJavascriptMethod", new Object[]{handlerName}, existCallback);
+        mDSBridge.hasJavascriptMethod(handlerName, existCallback);
     }
 
     /**
@@ -553,13 +282,9 @@ public class DWebView extends WebView {
      * @param object
      * @param namespace if empty, the object have no namespace.
      */
+    @Override
     public void addJavascriptObject(Object object, String namespace) {
-        if (namespace == null) {
-            namespace = "";
-        }
-        if (object != null) {
-            javaScriptNamespaceInterfaces.put(namespace, object);
-        }
+        mDSBridge.addJavascriptObject(object, namespace);
     }
 
     /**
@@ -567,12 +292,9 @@ public class DWebView extends WebView {
      *
      * @param namespace
      */
+    @Override
     public void removeJavascriptObject(String namespace) {
-        if (namespace == null) {
-            namespace = "";
-        }
-        javaScriptNamespaceInterfaces.remove(namespace);
-
+        mDSBridge.removeJavascriptObject(namespace);
     }
 
 
@@ -745,7 +467,7 @@ public class DWebView extends WebView {
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.JELLY_BEAN) {
                 String prefix = "_dsbridge=";
                 if (message.startsWith(prefix)) {
-                    result.confirm(innerJavascriptInterface.call(message.substring(prefix.length()), defaultValue));
+                    result.confirm(mDSBridge.getJavascriptInterfaceObject().call(message.substring(prefix.length()), defaultValue));
                     return true;
                 }
             }
