@@ -1,12 +1,18 @@
 package com.github.lixlee.dsbridge.internal;
 
+import android.os.Build;
 import android.support.annotation.Nullable;
+import android.support.annotation.RequiresApi;
+import android.support.v4.util.Consumer;
 import android.webkit.JavascriptInterface;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,28 +54,26 @@ public class ReflectJsApiTarget implements JsApiTarget {
     }
 
     public static class ReflectJsApiMethod implements JsApiMethod {
+        private static List<Class<?>[]> sMethodSpecs = null;
         private final Object mTarget;
         private final Method mMethod;
         private final List<Class<?>> mParametersTypes;
 
-        public ReflectJsApiMethod(Object target, Method method, List<Class<?>> parametersTypes) {
+        public ReflectJsApiMethod(Object target, Method method, Class<?>... parametersTypes) {
             mTarget = target;
             mMethod = method;
-            mParametersTypes = parametersTypes;
+            mParametersTypes = Arrays.asList(parametersTypes);
         }
 
         @Nullable
         public static ReflectJsApiMethod resolve(Object target, String name) {
             Class<?> cls = target.getClass();
-            List<Class<?>>[] specs = new List[]{
-                    Arrays.asList(Object.class, CompletionHandler.class),
-                    Collections.singletonList(Object.class),
-            };
+            List<Class<?>[]> specs = getMethodSpecs();
             Method method;
             ReflectJsApiMethod result = null;
-            for (List<Class<?>> types : specs) {
+            for (Class<?>[] types : specs) {
                 try {
-                    method = cls.getMethod(name, types.toArray(new Class[0]));
+                    method = cls.getMethod(name, types);
                     JavascriptInterface annotation = method.getAnnotation(JavascriptInterface.class);
                     if (annotation != null) {
                         result = new ReflectJsApiMethod(target, method, types);
@@ -89,10 +93,70 @@ public class ReflectJsApiTarget implements JsApiTarget {
         @Override
         public Object invoke(Object argument, @Nullable CompletionHandler<Object> completionHandler) throws InvocationTargetException, IllegalAccessException {
             mMethod.setAccessible(true);
+            Class<?> clazz = mParametersTypes.size() > 0 ? mParametersTypes.get(0) : null;
+            Object arg = castArgumentType(argument, clazz);
             if (isAsync()) {
-                return mMethod.invoke(mTarget, argument, completionHandler);
+                return mMethod.invoke(mTarget, arg, CompletionHandlerType.wrap(completionHandler));
             }
-            return mMethod.invoke(mTarget, argument);
+            return mMethod.invoke(mTarget, arg);
+        }
+
+        private static List<Class<?>[]> getMethodSpecs() {
+            if (sMethodSpecs != null) {
+                return sMethodSpecs;
+            }
+            List<Class<?>[]> specs = new ArrayList<>();
+            specs.add(new Class[]{JSONObject.class, CompletionHandler.class});
+            specs.add(new Class[]{JSONObject.class, Consumer.class});
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                specs.add(new Class[]{JSONObject.class, java.util.function.Consumer.class});
+            }
+            specs.add(new Class[]{JSONObject.class});
+
+            specs.add(new Class[]{Object.class, CompletionHandler.class});
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                specs.add(new Class[]{Object.class, java.util.function.Consumer.class});
+            }
+            specs.add(new Class[]{Object.class, Consumer.class});
+            specs.add(new Class[]{Object.class});
+
+            specs.add(new Class[]{String.class, CompletionHandler.class});
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                specs.add(new Class[]{String.class, java.util.function.Consumer.class});
+            }
+            specs.add(new Class[]{String.class, Consumer.class});
+            specs.add(new Class[]{String.class});
+
+            sMethodSpecs = specs;
+            return sMethodSpecs;
+        }
+
+        private static Object castArgumentType(Object argument, Class<?> type) {
+            if (type == Object.class || argument == null) {
+                return argument;
+            }
+            Object result = argument;
+            if (type == JSONObject.class) {
+                if (JSONObject.NULL == argument) {
+                    return null;
+                }
+                result = null;
+                if (argument instanceof JSONObject) {
+                    result = argument;
+                } else {
+                    try {
+                        result = new JSONObject(argument.toString());
+                    } catch (JSONException ignored) {
+                    }
+                }
+            } else if (type == String.class) {
+                if (JSONObject.NULL == argument) {
+                    result = "";
+                } else {
+                    result = String.valueOf(argument);
+                }
+            }
+            return result;
         }
     }
 
@@ -138,6 +202,63 @@ public class ReflectJsApiTarget implements JsApiTarget {
                 }
             }
             return null;
+        }
+    }
+
+    static class CompletionHandlerType implements CompletionHandler<Object>, Consumer<Object> {
+        private final CompletionHandler<Object> mCompletionHandler;
+
+        static CompletionHandlerType wrap(CompletionHandler<Object> completionHandler) {
+            if (completionHandler == null) {
+                return null;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                return new CompletionHandlerType24(completionHandler);
+            }
+            return new CompletionHandlerType(completionHandler);
+        }
+
+        public CompletionHandlerType(CompletionHandler<Object> completionHandler) {
+            mCompletionHandler = completionHandler;
+        }
+
+        @Override
+        public void complete(Object retValue) {
+            if (mCompletionHandler != null) {
+                mCompletionHandler.complete(retValue);
+            }
+        }
+
+        @Override
+        public void complete() {
+            if (mCompletionHandler != null) {
+                mCompletionHandler.complete();
+            }
+        }
+
+        @Override
+        public void setProgressData(Object value) {
+            if (mCompletionHandler != null) {
+                mCompletionHandler.setProgressData(value);
+            }
+        }
+
+        @Override
+        public void accept(Object retValue) {
+            complete(retValue);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
+    static class CompletionHandlerType24 extends CompletionHandlerType implements java.util.function.Consumer<Object> {
+
+        public CompletionHandlerType24(CompletionHandler<Object> completionHandler) {
+            super(completionHandler);
+        }
+
+        @Override
+        public void accept(Object retValue) {
+            complete(retValue);
         }
     }
 }
