@@ -1,6 +1,6 @@
 package com.github.lixlee.dsbridge.internal;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 /*
  * Created by lixlee on 2022/8/10

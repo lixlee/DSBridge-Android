@@ -1,7 +1,7 @@
 package org.cocos2dx.javascript.jsb;
 
-import android.support.annotation.CallSuper;
-import android.support.annotation.Keep;
+import androidx.annotation.CallSuper;
+import androidx.annotation.Keep;
 
 import com.github.lixlee.dsbridge.DSBridge;
 import com.github.lixlee.dsbridge.JavascriptEvaluator;

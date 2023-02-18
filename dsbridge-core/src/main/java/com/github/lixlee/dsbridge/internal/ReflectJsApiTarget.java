@@ -1,9 +1,9 @@
 package com.github.lixlee.dsbridge.internal;
 
 import android.os.Build;
-import android.support.annotation.Nullable;
-import android.support.annotation.RequiresApi;
-import android.support.v4.util.Consumer;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
+import androidx.core.util.Consumer;
 import android.webkit.JavascriptInterface;
 
 import org.json.JSONException;

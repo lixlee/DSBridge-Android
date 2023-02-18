@@ -1,6 +1,6 @@
 package com.github.lixlee.dsbridge;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import wendu.dsbridge.OnReturnValue;
 
