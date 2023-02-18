@@ -75,8 +75,7 @@ public class ReflectJsApiTarget implements JsApiTarget {
                         result = new ReflectJsApiMethod(target, method, types);
                         break;
                     }
-                } catch (NoSuchMethodException e) {
-                    e.printStackTrace();
+                } catch (NoSuchMethodException ignored) {
                 }
             }
             return result;
@@ -91,9 +90,9 @@ public class ReflectJsApiTarget implements JsApiTarget {
         public Object invoke(Object argument, @Nullable CompletionHandler<Object> completionHandler) throws InvocationTargetException, IllegalAccessException {
             mMethod.setAccessible(true);
             if (isAsync()) {
-                return mMethod.invoke(mMethod, argument, completionHandler);
+                return mMethod.invoke(mTarget, argument, completionHandler);
             }
-            return mMethod.invoke(mMethod, argument);
+            return mMethod.invoke(mTarget, argument);
         }
     }
 
