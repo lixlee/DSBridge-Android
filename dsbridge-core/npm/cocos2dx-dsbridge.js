@@ -7,6 +7,9 @@
         var cc = window.cc;
         if (cc && cc.sys && cc.sys.isNative) {
             var jsb = window.jsb;
+            if(!jsb && cc.native && cc.native.reflection) {
+                jsb = cc.native;
+            }
             var ret = '{"code":-2}';
             if (cc.sys.os == cc.sys.OS_IOS) {
                 ret = jsb.reflection.callStaticMethod('JSBDSBridge', 'call:args:', method, args);
