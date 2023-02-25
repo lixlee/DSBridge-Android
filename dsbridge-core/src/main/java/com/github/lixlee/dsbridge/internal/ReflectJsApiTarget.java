@@ -1,10 +1,13 @@
 package com.github.lixlee.dsbridge.internal;
 
 import android.os.Build;
+
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.util.Consumer;
+
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -13,6 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,6 +59,7 @@ public class ReflectJsApiTarget implements JsApiTarget {
 
     public static class ReflectJsApiMethod implements JsApiMethod {
         private static List<Class<?>[]> sMethodSpecs = null;
+        private static List<Class<?>> sCallbackTypes = null;
         private final Object mTarget;
         private final Method mMethod;
         private final List<Class<?>> mParametersTypes;
@@ -101,30 +106,41 @@ public class ReflectJsApiTarget implements JsApiTarget {
             return mMethod.invoke(mTarget, arg);
         }
 
+        private static List<Class<?>> getCallbackTypes() {
+            if (sCallbackTypes != null) {
+                return Collections.unmodifiableList(sCallbackTypes);
+            }
+            List<Class<?>> classes = new ArrayList<>(8);
+            classes.add(CompletionHandler.class);
+            classes.add(Consumer.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                classes.add(java.util.function.Consumer.class);
+            }
+            classes.add(ValueCallback.class);
+
+            sCallbackTypes = classes;
+            return Collections.unmodifiableList(classes);
+        }
+
         private static List<Class<?>[]> getMethodSpecs() {
             if (sMethodSpecs != null) {
                 return sMethodSpecs;
             }
+            List<Class<?>> callbackTypes = getCallbackTypes();
             List<Class<?>[]> specs = new ArrayList<>();
-            specs.add(new Class[]{JSONObject.class, CompletionHandler.class});
-            specs.add(new Class[]{JSONObject.class, Consumer.class});
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                specs.add(new Class[]{JSONObject.class, java.util.function.Consumer.class});
+            for (Class<?> type : callbackTypes) {
+                specs.add(new Class[]{JSONObject.class, type});
             }
             specs.add(new Class[]{JSONObject.class});
 
-            specs.add(new Class[]{Object.class, CompletionHandler.class});
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                specs.add(new Class[]{Object.class, java.util.function.Consumer.class});
+            for (Class<?> type : callbackTypes) {
+                specs.add(new Class[]{Object.class, type});
             }
-            specs.add(new Class[]{Object.class, Consumer.class});
             specs.add(new Class[]{Object.class});
 
-            specs.add(new Class[]{String.class, CompletionHandler.class});
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                specs.add(new Class[]{String.class, java.util.function.Consumer.class});
+            for (Class<?> type : callbackTypes) {
+                specs.add(new Class[]{String.class, type});
             }
-            specs.add(new Class[]{String.class, Consumer.class});
             specs.add(new Class[]{String.class});
 
             sMethodSpecs = specs;
@@ -205,7 +221,10 @@ public class ReflectJsApiTarget implements JsApiTarget {
         }
     }
 
-    static class CompletionHandlerType implements CompletionHandler<Object>, Consumer<Object> {
+    static class CompletionHandlerType implements
+            CompletionHandler<Object>,
+            Consumer<Object>,
+            ValueCallback<Object> {
         private final CompletionHandler<Object> mCompletionHandler;
 
         static CompletionHandlerType wrap(CompletionHandler<Object> completionHandler) {
@@ -246,6 +265,11 @@ public class ReflectJsApiTarget implements JsApiTarget {
         @Override
         public void accept(Object retValue) {
             complete(retValue);
+        }
+
+        @Override
+        public void onReceiveValue(Object value) {
+            complete(value);
         }
     }
 
