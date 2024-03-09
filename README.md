@@ -26,6 +26,6 @@ Add it in your root build.gradle at the end of repositories:
 ```gradle
 dependencies {
     // DSBridge with DWebView
-    implementation 'com.github.lixlee.DSBridge-Android:dsbridge-dwebview:3.0-SNAPSHOT'
+    implementation 'com.github.lixlee.DSBridge-Android:dsbridge-dwebview:3.1.0'
 }
 ```
