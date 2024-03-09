@@ -4,12 +4,13 @@ plugins {
 }
 
 android {
-    compileSdk 32
+    namespace 'com.github.lixlee.dsbridge.app'
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.github.lixlee.dsbridge.app"
         minSdk 19
-        targetSdk 32
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
