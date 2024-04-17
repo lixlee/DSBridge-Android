@@ -3,12 +3,14 @@ package com.github.lixlee.dsbridge.app.web
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.http.SslError
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
 import androidx.activity.OnBackPressedCallback
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.github.lixlee.dsbridge.app.R
@@ -88,8 +90,12 @@ open class WebPageFragment() : Fragment() {
         }
         webView?.webViewClient = object : WebViewClient() {
 
+            @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                return super.shouldOverrideUrlLoading(view, request)
+                if (request?.url?.scheme == "https" || request?.url?.scheme == "http") {
+                    return false
+                }
+                return true
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
