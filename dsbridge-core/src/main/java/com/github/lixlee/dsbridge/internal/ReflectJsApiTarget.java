@@ -19,8 +19,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import wendu.dsbridge.CompletionHandler;
 
@@ -28,7 +28,7 @@ import wendu.dsbridge.CompletionHandler;
  * Created by lixlee on 2022/8/10
  */
 @SuppressWarnings("unused")
-public class ReflectJsApiTarget implements JsApiTarget {
+public final class ReflectJsApiTarget implements JsApiTarget {
     private final Object mTarget;
     private final Map<String, JsApiMethod> mMethodCache = new ConcurrentHashMap<>();
 
@@ -37,8 +37,11 @@ public class ReflectJsApiTarget implements JsApiTarget {
     }
 
     public static JsApiTarget wrap(Object object) {
-        if (object instanceof JsApiTarget) {
+        if (object instanceof ReflectJsApiTarget
+                || object instanceof IterableJsApiTarget) {
             return (JsApiTarget) object;
+        } else if (object instanceof Iterable) {
+            return new IterableJsApiTarget(object);
         }
         return new ReflectJsApiTarget(object);
     }
@@ -50,14 +53,17 @@ public class ReflectJsApiTarget implements JsApiTarget {
         if (jsApiMethod != null) {
             return jsApiMethod;
         }
-        ReflectJsApiMethod method = ReflectJsApiMethod.resolve(mTarget, name);
+        JsApiMethod method = ReflectJsApiMethod.resolve(mTarget, name);
         if (method != null) {
             mMethodCache.put(name, method);
+        }
+        if (method == null && mTarget instanceof JsApiTarget) {
+            method = ((JsApiTarget) mTarget).findMethod(name);
         }
         return method;
     }
 
-    public static class ReflectJsApiMethod implements JsApiMethod {
+    public final static class ReflectJsApiMethod implements JsApiMethod {
         private static List<Class<?>[]> sMethodSpecs = null;
         private static List<Class<?>> sCallbackTypes = null;
         private final Object mTarget;
@@ -176,48 +182,41 @@ public class ReflectJsApiTarget implements JsApiTarget {
         }
     }
 
-    public static class MergedJsApiTarget implements JsApiTarget {
-        private final List<JsApiTarget> mTargets = new CopyOnWriteArrayList<>();
+    public final static class IterableJsApiTarget implements JsApiTarget {
+        private final ReflectJsApiTarget mOrigin;
+        private final Object mTarget;
+        private final Map<Object, JsApiTarget> mTargets = new ConcurrentHashMap<>();
 
-        public static JsApiTarget wrap(Object object) {
-            return ReflectJsApiTarget.wrap(object);
-        }
-
-        public static MergedJsApiTarget merge(Object... objects) {
-            MergedJsApiTarget merged = new MergedJsApiTarget();
-            for (Object object : objects) {
-                merged.add(object);
-            }
-            return merged;
-        }
-
-        public boolean add(Object object) {
-            if (object == null) {
-                return false;
-            }
-            return mTargets.add(wrap(object));
-        }
-
-        public void add(int index, Object object) {
-            if (object == null) {
-                return;
-            }
-            mTargets.add(index, wrap(object));
+        public IterableJsApiTarget(Object target) {
+            mOrigin = new ReflectJsApiTarget(target);
+            mTarget = target;
         }
 
         @Nullable
         @Override
         public JsApiMethod findMethod(String name) {
-            for (JsApiTarget target : mTargets) {
-                if (target == null) {
-                    continue;
-                }
-                JsApiMethod method = target.findMethod(name);
-                if (method != null) {
-                    return method;
+            JsApiMethod method = null;
+            if (mTarget instanceof Iterable) {
+                for (Object obj : (Iterable) mTarget) {
+                    if (obj == null) {
+                        continue;
+                    }
+                    ObjectKey objectKey = ObjectKey.of(obj);
+                    JsApiTarget target = mTargets.get(objectKey);
+                    if (target == null) {
+                        target = ReflectJsApiTarget.wrap(obj);
+                        mTargets.put(objectKey, target);
+                    }
+                    method = target.findMethod(name);
+                    if (method != null) {
+                        break;
+                    }
                 }
             }
-            return null;
+            if (method != null) {
+                return method;
+            }
+            return mOrigin.findMethod(name);
         }
     }
 
@@ -283,6 +282,31 @@ public class ReflectJsApiTarget implements JsApiTarget {
         @Override
         public void accept(Object retValue) {
             complete(retValue);
+        }
+    }
+
+    static class ObjectKey {
+        private Object mObject;
+
+        public ObjectKey(Object o) {
+            this.mObject = o;
+        }
+
+        static ObjectKey of(Object o) {
+            return new ObjectKey(o);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ObjectKey objectKey = (ObjectKey) o;
+            return mObject == objectKey.mObject;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mObject);
         }
     }
 }
